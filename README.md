@@ -49,7 +49,7 @@ sync.on("ping", {ipRequestLimit: 1, requestLimit: 10}, (payload, response) => {
 
 ## Emitting global events
 
-You can easily listen for events like in the following example and catch the response too.
+You can easily emit events to all known peers with the following example:
 
 ```js
 sync.emit("ping", { hello: "A and C" }, {
