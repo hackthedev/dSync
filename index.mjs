@@ -108,7 +108,6 @@ export default class dSync {
         return Math.min(10_000, Math.floor(base * Math.log(peers + 1)))
     }
 
-
     on(event, optionsOrHandler, maybeHandler) {
         let handler, options
         if (typeof optionsOrHandler === "function") {
@@ -136,18 +135,18 @@ export default class dSync {
         const eventId = randomUUID()
         const targetPeers = peers || Array.from(this.peers)
 
-        // merken: von uns selbst kam es auch
+        // remember our selfs too
         this.seenEvents.set(eventId, { sources: new Set(["self"]), timer: setTimeout(() => {
                 this.seenEvents.delete(eventId)
             }, 60_000) })
 
-        // kleines Delay, um evtl. Duplikate zu sammeln
+        // delay to avoid sending duplicates
         await new Promise(r => setTimeout(r, this.gossipDelay))
 
         for (const url of targetPeers) {
             const seen = this.seenEvents.get(eventId)
             if (seen && seen.sources.has(url)) {
-                continue // schon bekommen
+                continue // target peer already had the info, skip it
             }
 
             try {
