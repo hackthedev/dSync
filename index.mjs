@@ -15,10 +15,8 @@ export default class dSync {
         this.prefix = prefix
         this.handlers = new Map()
         this.peers = new Set()
-
-        // memory
-        this.seenEvents = new Map() // eventId { sources: Set, timer: NodeJS.Timeout }
-        this.gossipDelay = this.getDynamicDelay() // some cool helpful shit
+        this.seenEvents = new Map()
+        this.gossipDelay = this.getDynamicDelay()
 
         app.use(express.json())
         app.post(`/${this.prefix}`, async (req, res) => {
@@ -26,9 +24,8 @@ export default class dSync {
             const handlers = this.handlers.get(event) || []
             let responded = false
             const ip = req.ip || req.connection?.remoteAddress || "unknown"
-            const interval = 60_000 // 1 minute
+            const interval = 60_000
 
-            // Gossip dedup logic
             if (!eventId) {
                 res.json({ error: "Missing eventId" })
                 return
@@ -41,7 +38,6 @@ export default class dSync {
             const seen = this.seenEvents.get(eventId)
             seen.sources.add(source || "unknown")
 
-            // clean up memory after 1 minute
             if (!seen.timer) {
                 seen.timer = setTimeout(() => this.seenEvents.delete(eventId), 60_000)
             }
@@ -53,7 +49,9 @@ export default class dSync {
 
                 if (h.options.ipRequestLimit) {
                     if (!h.ipHits[ip]) h.ipHits[ip] = []
+
                     h.ipHits[ip] = h.ipHits[ip].filter(ts => now - ts < interval)
+
                     if (h.ipHits[ip].length >= h.options.ipRequestLimit) {
                         ipRateLimited = true
                     } else {
@@ -63,6 +61,7 @@ export default class dSync {
 
                 if (h.options.requestLimit) {
                     h.globalHits = h.globalHits.filter(ts => now - ts < interval)
+
                     if (h.globalHits.length >= h.options.requestLimit) {
                         globalRateLimited = true
                     } else {
@@ -90,12 +89,32 @@ export default class dSync {
                     rateLimitedIP: ip
                 }
 
-                h.handler(extendedPayload, (response) => {
-                    if (!responded) {
-                        res.json(response)
-                        responded = true
+                // callback handler
+                const maybeResponse = await new Promise(resolve => {
+                    let done = false
+                    const cb = (response) => {
+                        if (!done) {
+                            done = true
+                            resolve(response)
+                        }
+                    }
+
+                    try {
+                        const r = h.handler(extendedPayload, cb)
+                        
+                        // if returns promise
+                        if (r instanceof Promise) {
+                            r.then(val => cb(val)).catch(err => cb({ error: err.message }))
+                        }
+                    } catch (err) {
+                        cb({ error: err.message })
                     }
                 })
+
+                if (!responded) {
+                    res.json(maybeResponse)
+                    responded = true
+                }
             }
 
             if (!responded) res.json(undefined)
@@ -104,7 +123,7 @@ export default class dSync {
 
     getDynamicDelay() {
         const peers = this.peers.size || 1
-        const base = 200 // ms
+        const base = 200
         return Math.min(10_000, Math.floor(base * Math.log(peers + 1)))
     }
 
@@ -131,23 +150,32 @@ export default class dSync {
         this.peers.add(url)
     }
 
-    async emit(event, payload, { peers, callback } = {}) {
+    async emit(event, dataOrCallback, maybeCallback) {
+        let payload = {}
+        let callback
+
+        // arguments like in socket.io
+        if (typeof dataOrCallback === "function") {
+            callback = dataOrCallback
+        } else {
+            payload = dataOrCallback
+            callback = maybeCallback
+        }
+
         const eventId = randomUUID()
-        const targetPeers = peers || Array.from(this.peers)
+        const targetPeers = Array.from(this.peers)
 
-        // remember our selfs too
-        this.seenEvents.set(eventId, { sources: new Set(["self"]), timer: setTimeout(() => {
-                this.seenEvents.delete(eventId)
-            }, 60_000) })
+        this.seenEvents.set(eventId, {
+            sources: new Set(["self"]),
+            timer: setTimeout(() => this.seenEvents.delete(eventId), 60_000)
+        })
 
-        // delay to avoid sending duplicates
         await new Promise(r => setTimeout(r, this.gossipDelay))
 
+        const results = []
         for (const url of targetPeers) {
             const seen = this.seenEvents.get(eventId)
-            if (seen && seen.sources.has(url)) {
-                continue // target peer already had the info, skip it
-            }
+            if (seen && seen.sources.has(url)) continue
 
             try {
                 const res = await fetch(`${url}/${this.prefix}`, {
@@ -155,15 +183,17 @@ export default class dSync {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ event, payload, eventId, source: "self" })
                 })
-                if (typeof callback === "function") {
-                    const data = await res.json().catch(() => undefined)
-                    callback({ url, data })
-                }
+                const data = await res.json().catch(() => undefined)
+                results.push({ url, data })
             } catch (err) {
-                if (typeof callback === "function") {
-                    callback({ url, error: err.message })
-                }
+                results.push({ url, error: err.message })
             }
         }
+
+        if (typeof callback === "function") {
+            callback(results)
+        }
+
+        return results
     }
 }
