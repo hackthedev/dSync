@@ -39,8 +39,8 @@ To listen for events you could do something like below. This example uses `respo
 The `ipRequestLimit` is bound to the node emitting this event. In order to prevent further abuse and bypasses like VPNs or Proxy Servers, there is a general rate limit, `requestLimit`.
 
 ```js
-sync.on("ping", {ipRequestLimit: 1, requestLimit: 10}, (payload, response) => {
-    console.log("payload: ", payload)
+sync.on("ping", { ipRequestLimit: 1, requestLimit: 10 }, (payload, response) => {
+    console.log("payload:", payload)
     response({ pong: true, from: "B" })
 })
 ```
@@ -52,8 +52,8 @@ sync.on("ping", {ipRequestLimit: 1, requestLimit: 10}, (payload, response) => {
 You can easily emit events to all known peers with the following example:
 
 ```js
-sync.emit("ping", { hello: "A and C" }, {
-    callback: (res) => console.log("Response:", res)
+sync.emit("ping", { hello: "A and C" }, (res) => {
+    console.log("Response:", res)
 })
 ```
 
@@ -64,9 +64,11 @@ sync.emit("ping", { hello: "A and C" }, {
 To emit to specific peers you can add an array called `peers` like this: `peers: ["http://localhost:2052"]` and it will only emit to these peers. This is helpful if you target specific peers.
 
 ```js
-sync.emit("ping", { hello: "A and C" }, {
-    peers: ["http://localhost:2052"],
-    callback: (res) => console.log("Response:", res)
+sync.emit("ping", { 
+    hello: "A and C", 
+    peers: ["http://localhost:2052"]
+}, (res) => {
+    console.log("Response:", res)
 })
 ```
 
@@ -92,29 +94,20 @@ You can also get the rate limited IP address using `payload.rateLimitedIP`. Opti
 The idea of this is that you could for example set high rate limits, and if someone reaches the ip rate limit you could automatically create penalties or block a server for some time. The possibilities are endless here.
 
 ```js
-sync.on("ping", {ipRequestLimit: -1, requestLimit: 10, handleRateLimit: true}, (payload, response) => {
-    if(payload.ipRateLimited){
-        // do some custom stuff
-
-        // you can get the ip too
+sync.on("ping", { ipRequestLimit: -1, requestLimit: 10, handleRateLimit: true }, (payload, response) => {
+    if (payload.ipRateLimited) {
         console.log(payload.rateLimitedIP)
-
-        // optionally respond
-        response({ error: "IP Rate Limited reached!" })
+        response({ error: "IP Rate Limit reached!" })
         return;
     }
-    if(payload.rateLimited){
-        // do some custom stuff
-
-        // you can get the ip too
+    if (payload.rateLimited) {
         console.log(payload.rateLimitedIP)
-
-        // optionally respond
-        response({ error: "Rate Limit was reached." })
+        response({ error: "Rate Limit reached." })
         return;
     }
 
-    console.log("payload: ", payload)
+    console.log("payload:", payload)
     response({ pong: true, from: "B" })
 })
+
 ```

@@ -101,7 +101,7 @@ export default class dSync {
 
                     try {
                         const r = h.handler(extendedPayload, cb)
-                        
+
                         // if returns promise
                         if (r instanceof Promise) {
                             r.then(val => cb(val)).catch(err => cb({ error: err.message }))
