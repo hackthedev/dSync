@@ -1,5 +1,9 @@
 # dSync
 
+> [!WARNING]
+>
+> This repo wont be continued and has been moved to an org:   https://github.com/NETWORK-Z-Dev/dSync
+
 dSync stands for decentralized synchronization. The goal is to have an **easy way** for listening to events and emitting events to create a decentralized network. In order for this to work you need to know and add other nodes like in the example below. The usage and syntax was inspired by socket.io which is why it is pretty similar to it.
 
 ------
